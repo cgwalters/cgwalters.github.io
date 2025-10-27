@@ -1,0 +1,34 @@
+baseURL = 'https://cgwalters.github.io/'
+languageCode = 'en-us'
+title = 'Colin Walters'
+theme = 'PaperMod'
+
+[params]
+  description = "Colin Walters' blog"
+  author = "Colin Walters"
+  ShowReadingTime = true
+  ShowShareButtons = false
+  ShowPostNavLinks = true
+  ShowBreadCrumbs = true
+  ShowCodeCopyButtons = true
+  ShowRssButtonInSectionTermList = true
+
+# TODO fill this in
+#[params.homeInfoParams]
+#  Title = "Colin Walters"
+#  Content = "Blog posts and technical writing"
+
+[[menu.main]]
+  identifier = "archive"
+  name = "Archive"
+  url = "/archives/"
+  weight = 10
+
+[[menu.main]]
+  identifier = "search"
+  name = "Search"
+  url = "/search/"
+  weight = 20
+
+[outputs]
+  home = ["HTML", "RSS", "JSON"]
