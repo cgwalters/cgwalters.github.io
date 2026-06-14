@@ -1,0 +1,27 @@
+output_root := env_var_or_default('OUTPUT_ROOT', '../public/presentations')
+marp_version := '4.4.0'
+marp_cmd := 'npm exec --yes --package=@marp-team/marp-cli@' + marp_version + ' -- marp'
+
+default:
+    @just --list
+
+build deck:
+    mkdir -p "{{output_root}}/{{deck}}"
+    if [ -d "{{deck}}/assets" ]; then rm -rf "{{output_root}}/{{deck}}/assets" && cp -R "{{deck}}/assets" "{{output_root}}/{{deck}}/assets"; fi
+    {{marp_cmd}} --no-stdin --config .marprc.yml "{{deck}}/slides.md" --output "{{output_root}}/{{deck}}/index.html"
+
+build-all:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    shopt -s nullglob
+    for deck_dir in */; do
+      deck="${deck_dir%/}"
+      [[ -f "${deck}/slides.md" ]] || continue
+      just build "${deck}"
+    done
+
+preview deck:
+    {{marp_cmd}} --no-stdin --config .marprc.yml --preview --watch "{{deck}}/slides.md"
+
+clean:
+    rm -rf "{{output_root}}"
