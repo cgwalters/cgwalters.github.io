@@ -17,7 +17,8 @@ Colin Walters, Red Hat
 - Scale of change
 - Contribution policies
 - Sandboxing & Security
-- Effectiveness
+- Effectiveness (Ralph loops, Planning vs exec models, skills, ...)
+- Orchestrators and workflow (Gastown, Fullsend, Paperclip)
 - Discussion of the future
 
 ---

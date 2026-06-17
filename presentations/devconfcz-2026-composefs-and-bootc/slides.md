@@ -14,9 +14,19 @@ Colin Walters, Red Hat
 
 ## Agenda
 
-- Security
-- OSTree -> composefs!
-- Control of local mutable state
+- Why: Operating system security
+- What is composefs, the last ~year of development
+- Demo of RHEL 10.2 as sealed "only state you want" system
+- What's next?
+
+---
+
+## Computers: oops
+
+- We invented computers, now we need to keep them updated and secure
+- Operating system is at the nexus
+  - OS vs 3rd party apps, major versions, attack surface
+  - Mutable vs "immutable" (controlled state)
 
 ---
 
@@ -27,26 +37,24 @@ Colin Walters, Red Hat
 
 ---
 
-## composefs
+## Why composefs
 
 - Verified storage is hard
-- partition dm-verity has logistic constraints
-- loopback-mounted dm-verity is not efficient
+- partition dm-verity has logistical issues, loopback-mounted dm-verity is not efficient
 - And impedance mismatch between dm-verity and OCI containers
+- composefs: Shared storage on disk and in page cache, automatic dedup
 
 ---
 
-## composefs ecosystem
+## composefs ingredients
 
 - 3 big parts: (metadata-only) EROFS + overlayfs + fsverity
 - Any backing Linux filesystem you want with whatever block device you want (plain ext4, btrfs, XFS on LUKS, dm-crypt, RAID, ...)
-- github.com/composefs is C impl, github.com/composefs/composefs-rs is Rust (taking over C impl)
-- Rust impl also much higher level, has opinionated OCI, also initramfs handling.
-- Also part of CNCF
+- In a nutshell: verified storage independent of (lower) filesystem and block
 
 ---
 
-## Architecture of a composefs image
+## Architecture of a composefs image + repo
 
 <img src="assets/composefs.svg"/>
 
@@ -57,10 +65,28 @@ Colin Walters, Red Hat
 
 ---
 
+## composefs implementations and ecosystem
+
+- <https://github.com/composefs/composefs> is C impl, <https://github.com/composefs/composefs-rs> is Rust (taking over C impl)
+- Rust impl also much higher level, has opinionated OCI, also initramfs handling.
+- Also part of CNCF
+
+---
+
+## Where is composefs used?
+
+- bootc
+- [rauc.io](https://rauc.io)
+- podman (optionally, ~experimental)
+- Lots of custom/private things we mainly see because of bug reports/features
+  - e.g. I realized we need a build of bootc without ostree support
+---
+
 ## Building your own sealed UKI RHEL Image Mode
 
 - <https://github.com/redhat-cop/rhel-bootc-examples/tree/main/sealing>
 - Let's dive in!
+- (Quick shell command)
 
 ---
 
@@ -88,7 +114,7 @@ Colin Walters, Red Hat
 - Unified Kernel Images are a standard created by systemd project
 - `bootc container ukify`: Wraps `ukify` to handle composefs digest injection
 - But that mostly defers to composefs
-- This computation is faster and more efficient now!
+- 🆕 This computation is a lot faster and more efficient now!
 
 ---
 
@@ -109,26 +135,60 @@ Colin Walters, Red Hat
 - Note: exact reproducible mapping from OCI tar -> EROFS is required!
 - `bootc install to-filesystem` and `bootc upgrade` copies the embedded UKI to ESP
 
+---
+
+## Ingredient: Configuring bootc state
+
+Achieve: "Stateless except OS upgrades"
+
+```
+$ cat /usr/lib/composefs/setup-root-conf.toml
+[etc]
+mount = "transient"
+[var]
+mount = "none"
+$ cat /usr/lib/bootc/kargs.d/50-var-volatile.toml
+kargs = ["systemd.volatile=state"]
+$
+```
+
+---
+
 ## Ingredient: bcvk - local qemu+libvirt with bootable containers
 
 - Neato tool if I do say so myself (and I just did!)
+- `bcvk ephemeral` helps bootstrap persistent installs
 - `bcvk libvirt run` conveniently wraps `bootc install` to qcow2 + launch libvirt
 - Supports being passed secure boot keys
 
 ---
 
-## Demo!
+## More Demo
 
-- Walkthrough of build and booted system
+- bootctl + looking at composefs repo etc
 
 ---
 
-## What's next?
+## You want more?
 
 - ✅ Reimplementing composefs v1 format in Rust: predictable digests
 - ✅ On disk format stable
 - varlink APIs (in progress)
 - Eventually replacing the C composefs implementation
 - composefs-rs 1.0 (soon!)
+
+---
+
+## And even more?
+
 - bootc: Unified storage
 - 🆒 Generic sealed (non-bootable) container images
+
+---
+
+## Links and thanks!
+
+- <https://github.com/redhat-cop/rhel-bootc-examples>
+- <https://github.com/composefs/composefs-rs/>
+- <https://bootc.dev>
+- Thank you!
