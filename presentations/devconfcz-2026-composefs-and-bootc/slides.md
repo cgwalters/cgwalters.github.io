@@ -32,14 +32,15 @@ Colin Walters, Red Hat
 
 ## Threat scenarios
 
-- Attacker with physical access to block device of non-booted (or locked) system ("Evil maid")
-- Confidental computing (can change live block device)
-
+- Attacker with physical access to block device of non-booted (or locked) system 
+  - Physical attacker mounts disk ("Evil maid")
+  - Hypervisor: Confidental computing
+- Container image (or other isolation) breakout - avoid persistence across reboot
 ---
 
 ## Why composefs
 
-- Verified storage is hard
+- Storage is hard
 - partition dm-verity has logistical issues, loopback-mounted dm-verity is not efficient
 - And impedance mismatch between dm-verity and OCI containers
 - composefs: Shared storage on disk and in page cache, automatic dedup
@@ -104,17 +105,73 @@ Colin Walters, Red Hat
 
 - Uses stock rhel-bootc container image as builder
 - Generate "from scratch" rootfs (your arbitrary content)
-- Also takes Secure Boot keys as input to sign systemd-boot and a UKI
-- And all of that together is placed into a single OCI image
+
+```
+# You may also want to use e.g. --install to add extra packages here.
+FROM base AS target-base
+...
+RUN --mount=type=tmpfs,target=/run --mount=type=tmpfs,target=/tmp \
+    /usr/libexec/bootc-base-imagectl build-rootfs --manifest=standard /target-rootfs
+```
 
 ---
 
-## Ingredient: UKI and bootc+composefs
+## Ingredient: Secure boot keys sign systemd-boot
+
+```
+FROM base-rootfs AS penultimate
+RUN --mount=type=secret,id=secureboot_key \
+    --mount=type=secret,id=secureboot_cert <<EORUN
+set -xeuo pipefail
+/usr/lib/systemd/systemd-sbsign sign \
+    --private-key /run/secrets/secureboot_key \
+    --certificate /run/secrets/secureboot_cert \
+    --output /tmp/systemd-bootx64.efi.signed \
+    /usr/lib/systemd/boot/efi/systemd-bootx64.efi
+```
+
+---
+
+## Ingredient: Create and sign UKI via bootc container ukify
 
 - Unified Kernel Images are a standard created by systemd project
 - `bootc container ukify`: Wraps `ukify` to handle composefs digest injection
-- But that mostly defers to composefs
-- 🆕 This computation is a lot faster and more efficient now!
+  - 🆕 This computation is a lot faster and more efficient now!
+
+---
+
+## Ingredient: Create and sign UKI via bootc container ukify
+
+```
+FROM tools AS sealer
+RUN --mount=type=bind,from=penultimate,target=/target \
+    --mount=type=secret,id=secureboot_key \
+    --mount=type=secret,id=secureboot_cert <<EORUN
+...
+bootc container ukify --rootfs /target \
+  --karg rw \
+  -- \
+  --signtool systemd-sbsign \
+  --secureboot-private-key /run/secrets/secureboot_key \
+  --secureboot-certificate /run/secrets/secureboot_cert \
+  --no-sign-kernel \
+  --output /out/uki.efi
+```
+
+---
+
+## Combining build ingredients!
+
+```
+FROM penultimate
+# The last layer: copy in our UKI from the sealer build stage
+COPY --from=sealer /out/boot /boot
+# Required + suggested metadata
+LABEL containers.bootc 1
+ENV container=oci
+STOPSIGNAL SIGRTMIN+3
+CMD ["/sbin/init"]
+```
 
 ---
 
@@ -125,6 +182,16 @@ Colin Walters, Red Hat
 <img src="assets/rogdham_gif_md5_hashquine.gif"/>
 
 - No, the trick is: `bootc container ukify` omits `/boot` where the UKI goes
+- Which pairs with the `COPY --from=sealer /out/boot /boot` 
+
+---
+
+## Another aside: The "magic trick" of reproducible EROFS
+
+- Constraint: Can't fundamentally change OCI representation or would break ecosystem
+- The composefs (EROFS) is computed on the server (given a mounted filesystem inside container runtime)
+- Then re-generated on the client from the tar streams - in other words, it just looks like any other OCI image on the wire
+- Requirement: we need to nail down an exact reproducible frozen format (actually there's two, that's another story)
 
 ---
 
@@ -132,12 +199,29 @@ Colin Walters, Red Hat
 
 - `bootc` wraps composefs-rs for both install and upgrade
 - OCI image is fetched, we convert tar layers into composefs object store and synthesize the EROFS
-- Note: exact reproducible mapping from OCI tar -> EROFS is required!
 - `bootc install to-filesystem` and `bootc upgrade` copies the embedded UKI to ESP
+
 
 ---
 
-## Ingredient: Configuring bootc state
+## Ingredient: bcvk - local qemu+libvirt with bootable containers
+
+- Neato tool if I do say so myself (and I just did!)
+- `bcvk ephemeral` helps bootstrap persistent installs
+- `bcvk libvirt run` conveniently wraps `bootc install` to qcow2 + launch libvirt
+- Supports being passed secure boot keys
+
+---
+
+## More Demos
+
+- Let's launch an install with an incorrect `composefs=`
+- Inspect `/sysroot` including `/state`
+- Inspect `/boot` (loader and EFI)
+
+---
+
+## More things you can do: Configuring bootc state
 
 Achieve: "Stateless except OS upgrades"
 
@@ -154,27 +238,13 @@ $
 
 ---
 
-## Ingredient: bcvk - local qemu+libvirt with bootable containers
-
-- Neato tool if I do say so myself (and I just did!)
-- `bcvk ephemeral` helps bootstrap persistent installs
-- `bcvk libvirt run` conveniently wraps `bootc install` to qcow2 + launch libvirt
-- Supports being passed secure boot keys
-
----
-
-## More Demo
-
-- bootctl + looking at composefs repo etc
-
----
-
-## You want more?
+## What else has happened and is next?
 
 - ✅ Reimplementing composefs v1 format in Rust: predictable digests
 - ✅ On disk format stable
 - varlink APIs (in progress)
 - Eventually replacing the C composefs implementation
+- Opt-in support for ostree fetching+storage to transition existing tooling
 - composefs-rs 1.0 (soon!)
 
 ---
@@ -182,7 +252,11 @@ $
 ## And even more?
 
 - bootc: Unified storage
+  - Shifting things so that we pull *first* into composefs repo, then reflink into ostree
+  - Also supporting pulling via podman pull, then reflink into composefs!
+  - This ties with earlier varlink work; `splitfdstream` as generic reflinkable (container) interchange
 - 🆒 Generic sealed (non-bootable) container images
+  - OCI artifact with composefs digest + fsverity signatures: covers manifest+config+root
 
 ---
 

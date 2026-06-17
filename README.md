@@ -52,18 +52,28 @@ cd presentations
 # Build one deck into the Pages artifact tree
 just build demo
 
+# Export one deck as a Google Slides-importable PPTX
+just export-pptx demo
+
 # Or rebuild all decks
 just build-all
+
+# Or export every deck as PPTX
+just export-all-pptx
 
 # Live preview while editing a deck
 just preview demo
 ```
 
-The presentation recipes invoke Marp through `npm exec`, so local development only needs Node.js on your `PATH`; there is no presentation-specific `package.json` or install step.
+The presentation recipes invoke Marp through `npm exec`, so HTML build and preview only need Node.js on your `PATH`; there is no presentation-specific `package.json` or install step. PPTX export also requires a local browser that Marp can drive, such as Chrome, Edge, or Firefox.
 
 Decks live at `presentations/<deck>/slides.md` and are published at `/presentations/<deck>/`.
 
 If a deck uses local files, keep them under `presentations/<deck>/assets/`; `just build <deck>` copies that directory into `public/presentations/<deck>/assets/` next to the generated HTML.
+
+`just export-pptx <deck>` writes `public/presentations/<deck>/<deck>.pptx` using Marp CLI's built-in PPTX exporter, which Google Slides can import directly.
+
+Marp's regular PPTX export favors visual fidelity: slides are rendered into the presentation rather than preserved as fully editable native slide objects, so Google Slides import works better than post-import editing. Marp also has an experimental `--pptx-editable` mode, but it requires LibreOffice Impress and can reduce fidelity, so this repo does not enable it by default.
 
 Use `just clean` from `presentations/` to remove generated presentation output under `public/presentations/`.
 

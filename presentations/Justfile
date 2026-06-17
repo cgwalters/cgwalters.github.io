@@ -1,6 +1,7 @@
 output_root := env_var_or_default('OUTPUT_ROOT', '../public/presentations')
 marp_version := '4.4.0'
 marp_cmd := 'npm exec --yes --package=@marp-team/marp-cli@' + marp_version + ' -- marp'
+marp_args := '--no-stdin --config .marprc.yml'
 
 default:
     @just --list
@@ -8,7 +9,11 @@ default:
 build deck:
     mkdir -p "{{output_root}}/{{deck}}"
     if [ -d "{{deck}}/assets" ]; then rm -rf "{{output_root}}/{{deck}}/assets" && cp -R "{{deck}}/assets" "{{output_root}}/{{deck}}/assets"; fi
-    {{marp_cmd}} --no-stdin --config .marprc.yml "{{deck}}/slides.md" --output "{{output_root}}/{{deck}}/index.html"
+    {{marp_cmd}} {{marp_args}} "{{deck}}/slides.md" --output "{{output_root}}/{{deck}}/index.html"
+
+export-pptx deck:
+    mkdir -p "{{output_root}}/{{deck}}"
+    {{marp_cmd}} {{marp_args}} --pptx "{{deck}}/slides.md" --output "{{output_root}}/{{deck}}/{{deck}}.pptx"
 
 build-all:
     #!/usr/bin/env bash
@@ -20,8 +25,18 @@ build-all:
       just build "${deck}"
     done
 
+export-all-pptx:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    shopt -s nullglob
+    for deck_dir in */; do
+      deck="${deck_dir%/}"
+      [[ -f "${deck}/slides.md" ]] || continue
+      just export-pptx "${deck}"
+    done
+
 preview deck:
-    {{marp_cmd}} --no-stdin --config .marprc.yml --preview --watch "{{deck}}/slides.md"
+    {{marp_cmd}} {{marp_args}} --preview --watch "{{deck}}/slides.md"
 
 clean:
     rm -rf "{{output_root}}"
